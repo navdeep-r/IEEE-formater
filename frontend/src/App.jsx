@@ -4,8 +4,10 @@ import './App.css';
 const App = () => {
   const [formData, setFormData] = useState({
     title: '',
+    paperNotice: '',
     funding: '',
-    authors: [{ firstName: '', lastName: '', department: '', organization: '', cityCountry: '', email: '' }],
+    dropCap: true,
+    authors: [{ firstName: '', lastName: '', membership: '', department: '', organization: '', cityCountry: '', email: '' }],
     abstract: '',
     keywords: '',
     sections: [
@@ -37,7 +39,7 @@ const App = () => {
     if (formData.authors.length < 6) {
       setFormData(prev => ({
         ...prev,
-        authors: [...prev.authors, { firstName: '', lastName: '', department: '', organization: '', cityCountry: '', email: '' }]
+        authors: [...prev.authors, { firstName: '', lastName: '', membership: '', department: '', organization: '', cityCountry: '', email: '' }]
       }));
     }
   };
@@ -111,6 +113,16 @@ const App = () => {
               <p className="field-note">Note: Sub-titles are not captured for https://ieeexplore.ieee.org and should not be used.</p>
             </div>
             <div className="input-group">
+              <label htmlFor="paperNotice">Special Paper Notice</label>
+              <input
+                type="text"
+                id="paperNotice"
+                value={formData.paperNotice}
+                onChange={(e) => handleInputChange('paperNotice', e.target.value)}
+                placeholder="e.g., (Invited Paper)"
+              />
+            </div>
+            <div className="input-group">
               <label htmlFor="funding">Funding / Financial Support</label>
               <input
                 type="text"
@@ -119,6 +131,17 @@ const App = () => {
                 onChange={(e) => handleInputChange('funding', e.target.value)}
                 placeholder="Identify applicable funding agency here. If none, leave blank."
               />
+            </div>
+            <div className="input-group checkbox-group">
+              <label htmlFor="dropCap" className="checkbox-label">
+                <input
+                  type="checkbox"
+                  id="dropCap"
+                  checked={formData.dropCap}
+                  onChange={(e) => handleInputChange('dropCap', e.target.checked)}
+                />
+                Enable Drop Cap on Introduction (First Letter)
+              </label>
             </div>
           </div>
 
@@ -147,6 +170,15 @@ const App = () => {
                       onChange={(e) => handleAuthorChange(index, 'lastName', e.target.value)}
                       placeholder="Surname"
                       required
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label>Membership</label>
+                    <input
+                      type="text"
+                      value={author.membership}
+                      onChange={(e) => handleAuthorChange(index, 'membership', e.target.value)}
+                      placeholder="e.g., Member, IEEE"
                     />
                   </div>
                   <div className="input-group">

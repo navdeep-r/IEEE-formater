@@ -16,48 +16,22 @@ def generate_latex_document(form_data):
     # Process title and funding
     title = form_data.get('title', 'Conference Paper Title*')
     funding = form_data.get('funding', '')
-    
-    # Construct the title command with the required footnote
-    # The template has a specific note about sub-titles which we should include if requested, 
-    # but dynamic content is better. We will follow the structure:
-    # \title{Title*\\ {\footnotesize \textsuperscript{*}Note: Sub-titles are not captured...} \thanks{...}}
-    
-    # However, for a real generator, we should probably stick to the user's input.
-    # The user REQUESTED the specific template format.
-    # "Conference Paper Title*\\ {\footnotesize \textsuperscript{*}Note: Sub-titles are not captured for https://ieeexplore.ieee.org and should not be used} \thanks{Identify applicable funding agency here. If none, delete this.}"
-    
-    # We will insert the user's title.
-    # If funding is present, we add the \thanks.
-    # We will ALSO include the subtitle warning as per the requested template visual, 
-    # but typically a generator shouldn't force this note on final papers.
-    # BUT the user asked to "generate the pdf downloadable doc as given".
-    # So I will replicate the template structure but with user data.
+    paper_notice = form_data.get('paperNotice', '')
+    drop_cap = form_data.get('dropCap', True)
     
     title_latex = f"{title}*\\\\\n{{\\footnotesize \\textsuperscript{{*}}Note: Sub-titles are not captured for https://ieeexplore.ieee.org and should not be used}}"
     
     if funding:
         title_latex += f"\n\\thanks{{{funding}}}"
-    else:
-        # If no funding, the template says "Identify applicable funding... If none, delete this."
-        # If the user left it blank, we delete it (i.e., add nothing), OR we can add the placeholder if they truly want the template.
-        # Given "as given", I will assume if they type nothing, they want the clean version?
-        # Re-reading prompt: "modify the current codebase where it asks it the required fields... and generate the pdf ... as given"
-        # It's safer to generate a CLEAN paper if fields are filled, but the structure must match.
-        pass
-
+    
     # Process authors
     authors = form_data.get('authors', [])
     author_blocks = []
     
     for i, author in enumerate(authors):
         # Format:
-        # \IEEEauthorblockN{1\textsuperscript{st} Given Name Surname}
-        # \IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-        # \textit{name of organization (of Aff.)}\\
-        # City, Country \\
-        # email address or ORCID}
+        # \IEEEauthorblockN{1\textsuperscript{st} Given Name Surname \IEEEmembership{Member, IEEE}}
         
-        # Calculate ordinal for the name (1st, 2nd, etc.)
         ordinal_suffix = "th"
         if (i + 1) % 10 == 1 and (i + 1) % 100 != 11:
             ordinal_suffix = "st"
@@ -69,6 +43,10 @@ def generate_latex_document(form_data):
         ordinal = f"{i + 1}\\textsuperscript{{{ordinal_suffix}}}"
         
         name = f"{ordinal} {author.get('firstName', '')} {author.get('lastName', '')}"
+        membership = author.get('membership', '')
+        if membership:
+            name += f" \\IEEEmembership{{{membership}}}"
+            
         dept = author.get('department', '')
         org = author.get('organization', '')
         loc = author.get('cityCountry', '')
@@ -86,8 +64,6 @@ def generate_latex_document(form_data):
     
     # Process abstract
     abstract = form_data.get('abstract', '')
-    # The template manual says: "This document is a model..." inside \begin{abstract}
-    # We just put the user content there.
     
     # Process keywords
     keywords = form_data.get('keywords', '')
@@ -97,15 +73,26 @@ def generate_latex_document(form_data):
     sections_latex = []
         
     for i, section in enumerate(sections):
-        # The template uses \section{Introduction} (not I. Introduction manually, IEEEtran does numbering)
-        # BUT the template sample text explicitly writes: \section{Introduction}
-        # and result shows "I. Introduction".
-        # However, the user's PREVIOUS code was doing manual roman numerals: "\\section{I. Introduction}"
-        # IEEEtran class handles section numbering AUTOMATICALLY.
-        # So we should just use \section{Title}.
-        
         title_sec = section.get('title', 'Section')
         content_sec = section.get('content', '')
+        
+        # Handle Drop Cap for the first section if enabled
+        if i == 0 and drop_cap and content_sec:
+            # \IEEEPARstart{F}{irst} word...
+            # We need to split the first word
+            words = content_sec.split(' ', 1)
+            if words:
+                first_word = words[0]
+                rest_of_text = words[1] if len(words) > 1 else ''
+                
+                if len(first_word) > 1:
+                    first_letter = first_word[0]
+                    rest_of_word = first_word[1:]
+                    content_sec = f"\\IEEEPARstart{{{first_letter}}}{{{rest_of_word}}} {rest_of_text}"
+                else:
+                    # Single letter word? unusual but handle it
+                    content_sec = f"\\IEEEPARstart{{{first_word}}}{{}} {rest_of_text}"
+        
         sections_latex.append(f"\\section{{{title_sec}}}\n{content_sec}")
     
     # Join sections
@@ -115,6 +102,11 @@ def generate_latex_document(form_data):
     references = form_data.get('references', '')
     
     # Create the complete LaTeX document
+    # Inject special paper notice if present
+    special_notice_cmd = ""
+    if paper_notice:
+        special_notice_cmd = f"\\IEEEspecialpapernotice{{{paper_notice}}}\n"
+
     latex_template = f"""\\documentclass[conference]{{IEEEtran}}
 \\IEEEoverridecommandlockouts
 % The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
@@ -132,6 +124,7 @@ def generate_latex_document(form_data):
 
 \\title{{{title_latex}}}
 
+{special_notice_cmd}
 \\author{{{authors_str}}}
 
 \\maketitle
@@ -173,7 +166,9 @@ def generate_pdf():
         # Extract variables from form data for use in both LaTeX and fallback
         # Extract variables from form data for use in both LaTeX and fallback
         title = form_data.get('title', 'Untitled Paper')
-        funding = form_data.get('funding', '') # New field
+        funding = form_data.get('funding', '')
+        paper_notice = form_data.get('paperNotice', '') # New field
+        drop_cap = form_data.get('dropCap', True) # New field
         authors = form_data.get('authors', [])
         abstract = form_data.get('abstract', '')
         keywords = form_data.get('keywords', '')
@@ -221,7 +216,7 @@ def generate_pdf():
                 
                 # High-quality fallback using ReportLab Platypus
                 from reportlab.lib.pagesizes import A4
-                from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate, Paragraph, Spacer, Table, TableStyle
+                from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate, Paragraph, Spacer, Table, TableStyle, Flowable
                 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
                 from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
                 from reportlab.lib import colors
@@ -259,6 +254,17 @@ def generate_pdf():
                     spaceAfter=12
                 )
                 
+                 # Special Paper Notice Style
+                notice_style = ParagraphStyle(
+                    'IEEE_Notice',
+                    parent=styles['Normal'],
+                    fontName='Times-Italic',
+                    fontSize=10,
+                    leading=12,
+                    alignment=TA_CENTER,
+                    spaceAfter=12
+                )
+
                 # Author Style
                 author_name_style = ParagraphStyle(
                     'IEEE_Author_Name',
@@ -288,6 +294,15 @@ def generate_pdf():
                     alignment=TA_JUSTIFY
                 )
                 
+                # Drop Cap First Letter Style
+                drop_cap_style = ParagraphStyle(
+                    'IEEE_DropCap',
+                    parent=body_style,
+                    fontSize=24,
+                    leading=24,
+                    fontName='Times-Bold'
+                )
+
                 # Heading sections
                 h1_style = ParagraphStyle(
                     'IEEE_H1',
@@ -301,16 +316,34 @@ def generate_pdf():
                     textTransform='uppercase' 
                 )
                 
-                # Story content
-                story = []
+                # --- Page Layout Definitions ---
+                page_width, page_height = A4
+                left_margin = 0.6*inch
+                right_margin = 0.6*inch
+                top_margin = 0.7*inch
+                bottom_margin = 0.7*inch
+                
+                # --- MEASURE HEADER HEIGHT DYNAMICALLY ---
+                # We need to know how tall the title, notices, authors, abstract, and keywords are
+                # so we can size the 'Header Frame' correctly and push the columns down.
+
+                available_width = page_width - left_margin - right_margin
+                
+                # We will collect the flowables for the header here first to measure them
+                header_story = []
                 
                 # 1. Title
-                story.append(Paragraph(title + "*", title_style))
-                story.append(Paragraph("<i>*Note: Sub-titles are not captured for https://ieeexplore.ieee.org and should not be used</i>", subtitle_style))
-                if funding:
-                    story.append(Paragraph(f"<i>Funding: {funding}</i>", subtitle_style))
+                t_para = Paragraph(title + "*", title_style)
+                header_story.append(t_para)
+                header_story.append(Paragraph("<i>*Note: Sub-titles are not captured for https://ieeexplore.ieee.org and should not be used</i>", subtitle_style))
                 
-                story.append(Spacer(1, 10))
+                if paper_notice:
+                    header_story.append(Paragraph(paper_notice, notice_style))
+
+                if funding:
+                    header_story.append(Paragraph(f"<i>Funding: {funding}</i>", subtitle_style))
+                
+                header_story.append(Spacer(1, 10))
                 
                 # 2. Authors (Grid Layout)
                 # Group authors into rows of 3
@@ -318,14 +351,17 @@ def generate_pdf():
                 current_row = []
                 for i, author in enumerate(authors):
                     # Format author text
-                    # e.g. "1st Name Surname"
                     ordinal_suffix = "th"
                     val = i + 1
                     if val % 10 == 1 and val % 100 != 11: ordinal_suffix = "st"
                     elif val % 10 == 2 and val % 100 != 12: ordinal_suffix = "nd"
                     elif val % 10 == 3 and val % 100 != 13: ordinal_suffix = "rd"
                     
-                    name_text = f"{val}<sup>{ordinal_suffix}</sup> {author.get('firstName', '')} {author.get('lastName', '')}"
+                    membership_txt = ""
+                    if author.get('membership'):
+                        membership_txt = f" <i>{author.get('membership')}</i>"
+
+                    name_text = f"{val}<sup>{ordinal_suffix}</sup> {author.get('firstName', '')} {author.get('lastName', '')}{membership_txt}"
                     affil_text = f"{author.get('department', '')}<br/>{author.get('organization', '')}<br/>{author.get('cityCountry', '')}<br/>{author.get('email', '')}"
                     
                     # Create cell content
@@ -347,7 +383,7 @@ def generate_pdf():
                 
                 # Create Table
                 if author_rows:
-                    table = Table(author_rows, colWidths=[2.3*inch]*3)
+                    table = Table(author_rows, colWidths=[available_width/3.0]*3)
                     table.setStyle(TableStyle([
                         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
                         ('VALIGN', (0,0), (-1,-1), 'TOP'),
@@ -355,22 +391,33 @@ def generate_pdf():
                         ('RIGHTPADDING', (0,0), (-1,-1), 2),
                         ('BOTTOMPADDING', (0,0), (-1,-1), 10),
                     ]))
-                    story.append(table)
-                    story.append(Spacer(1, 15))
+                    header_story.append(table)
+                    header_story.append(Spacer(1, 10))
                 
                 # 3. Abstract
                 if abstract:
-                    # IEEE Abstract is bold italic start
-                    # "Abstract—This document..."
                     abs_text = f"<b><i>Abstract</i></b>—{abstract.replace('Abstract—', '')}"
-                    story.append(Paragraph(abs_text, ParagraphStyle('Abs', parent=body_style, fontName='Times-Bold', leftIndent=0, rightIndent=0)))
-                    story.append(Spacer(1, 6))
+                    header_story.append(Paragraph(abs_text, ParagraphStyle('Abs', parent=body_style, fontName='Times-Bold', leftIndent=0, rightIndent=0)))
+                    header_story.append(Spacer(1, 6))
                 
                 # 4. Keywords
                 if keywords:
                     kw_text = f"<b><i>Index Terms</i></b>—{keywords.replace('Keywords—', '')}"
-                    story.append(Paragraph(kw_text, ParagraphStyle('Kw', parent=body_style, fontName='Times-Bold')))
-                    story.append(Spacer(1, 12))
+                    header_story.append(Paragraph(kw_text, ParagraphStyle('Kw', parent=body_style, fontName='Times-Bold')))
+                    header_story.append(Spacer(1, 12))
+                    
+                # Calculate total height
+                total_header_height = 0
+                for elem in header_story:
+                    w, h = elem.wrap(available_width, page_height)
+                    total_header_height += h
+                
+                # Add a little buffer
+                header_buffer = 0.2 * inch
+                calculated_header_height = total_header_height + header_buffer
+                
+                # --- Construct Main Story ---
+                story = list(header_story)
                 
                 # 5. Sections
                 for i, section in enumerate(sections):
@@ -380,8 +427,21 @@ def generate_pdf():
                     story.append(Paragraph(sec_title, h1_style))
                     
                     # Content
-                    content_clean = section.get('content', '').replace('\n', '<br/>')
-                    story.append(Paragraph(content_clean, body_style))
+                    content_txt = section.get('content', '')
+                    
+                    # Simulated Drop Cap for first section only
+                    # Note: We are already past the header, so this is in the columns now.
+                    if i == 0 and drop_cap and content_txt:
+                         # Simple simulation: Make first letter bigger and bold
+                         if len(content_txt) > 0:
+                            first_letter = content_txt[0]
+                            rest = content_txt[1:].replace('\n', '<br/>')
+                            content_clean = f'<font size="20"><b>{first_letter}</b></font>{rest}'
+                            story.append(Paragraph(content_clean, body_style))
+                    else:
+                        content_clean = content_txt.replace('\n', '<br/>')
+                        story.append(Paragraph(content_clean, body_style))
+                        
                     story.append(Spacer(1, 10))
                 
                 # 6. References
@@ -398,36 +458,31 @@ def generate_pdf():
                 # Define Frames
                 # Layout: Top Header Area (for title/auth), then 2 Columns below
                 
-                page_width, page_height = A4
-                left_margin = 0.6*inch
-                right_margin = 0.6*inch
-                top_margin = 0.7*inch
-                bottom_margin = 0.7*inch
-                
                 full_width = page_width - left_margin - right_margin
                 col_gap = 0.2*inch
                 col_width = (full_width - col_gap) / 2
                 
-                # Frame 1: Header (Title + Authors)
-                # We assume header takes max 3.5 inches. 
-                # Ideally we'd measure, but fixed is safer for fallback.
-                header_height = 3.5 * inch
-                
+                # Frame 1: Header (Dynamic Height)
                 header_frame = Frame(
                     left_margin, 
-                    page_height - top_margin - header_height, 
+                    page_height - top_margin - calculated_header_height, 
                     full_width, 
-                    header_height,
+                    calculated_header_height,
                     id='header',
-                    showBoundary=0 # Set to 1 for debugging
+                    showBoundary=0
                 )
                 
                 # Columns for First Page (starts below header)
+                # Height = (Top Y) - (Bottom Y)
+                # Top Y = page_height - top_margin - calculated_header_height - 0.1*inch
+                # Bottom Y = bottom_margin
+                first_page_col_height = page_height - top_margin - calculated_header_height - 0.1*inch - bottom_margin
+                
                 col1_first = Frame(
                     left_margin, 
                     bottom_margin, 
                     col_width, 
-                    page_height - top_margin - header_height - 0.2*inch, # space between header and cols
+                    first_page_col_height,
                     id='col1_first',
                     showBoundary=0
                 )
@@ -436,7 +491,7 @@ def generate_pdf():
                     left_margin + col_width + col_gap, 
                     bottom_margin, 
                     col_width, 
-                    page_height - top_margin - header_height - 0.2*inch,
+                    first_page_col_height,
                     id='col2_first',
                     showBoundary=0
                 )
